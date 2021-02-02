@@ -2,6 +2,7 @@
 
 set timezone "CST6CDT"
 set serialPort "/dev/ttuUSB0"
+set baudRate 115200
 
 array set errorCodes {
 	017 "Keybus Busy - Installer Mode"
@@ -17,6 +18,9 @@ array set errorCodes {
 	033  "No response from thermostat or Escort™ module"
 }
 
+#
+# comm_callback - called when data is available from TL-100
+#
 proc comm_callback {} {
 	if {[gets $::comm line] >= 0} {
 		puts "'$line'"
@@ -27,13 +31,22 @@ proc comm_callback {} {
 	}
 }
 
+#
+# open_serial_port - connect to TL-100 at the configured device
+#  name and baud rate.  set up for correct translation and
+#  buffering and arrange for callbacks when complete lines have
+#  been read
+#
 proc open_serial_port {} {
 	set ::comm [open $::serialPort r+]
-	fconfigure $::comm -mode 115200,n,8,1 -translation crlf -blocking 0 -buffering line
+	fconfigure $::comm -mode $::baudRate,n,8,1 -translation crlf -blocking 0 -buffering line
 	fileevent $::comm readable comm_callback
 	return $::comm
 }
 
+#
+# calc_checksum - given a string, return the checksum by DSC's algorithm
+#
 proc calc_checksum {string} {
 	set sum 0
 	foreach char [split $string ""] {
@@ -43,34 +56,66 @@ proc calc_checksum {string} {
 	return [format %02X $sum]
 }
 
+#
+# verify_checksum - given a string received from TL-100, verify its checksum
+#
+proc calc_checksum {string} {
+	set checksum [string range $string end-1 end]
+	set string [string range $string 0 end-2]
+
+	return [expr {$checksum eq [calc_checksum $string]}]
+}
+
+#
+# send - send a string to the TL-100 with a calculated checksum and CRLF
+#
 proc send {string} {
 	puts $::comm "$string[calc_checksum $string]"
 
 }
 
+#
+# poll - send a poll command
+#
 proc poll {} {
 	send "000"
 }
 
+#
+# status_request - send a status request command
+#
 proc status_request {} {
 	send "001"
 }
 
+#
+# labels_request - send a labels request command
+#
 proc labels_request {} {
 	send "002"
 }
 
+#
+# set_time_and_date - send a command to set time and date
+#   from the system time
+#
 proc set_time_and_date {} {
 	set clock [clock format [clock seconds] -format "%H%M%m%d%y" -timezone $::timezone]
 	send "010$clock"
 }
 
+#
+# partition_check - verify a partition number is between 1 and 8 or error out
+#
 proc partition_check {partition} {
 	if {$partition < 1 || $partition > 8} {
 		error "partition must be between 1 and 8"
 	}
 }
 
+#
+# code_check - verify a code number is numeric and 4 or 6 digits
+#
 proc code_check {code} {
 	if {![string is digit $code]} {
 		error "code '$code' isn't all digits"
@@ -87,6 +132,10 @@ proc code_check {code} {
 	return "${code}00"
 }
 
+#
+# command_output_control - send a command output control command
+#  for the specified partition and program
+#
 proc command_output_control {partition program} {
 	partition_check $partition
 
@@ -97,24 +146,36 @@ proc command_output_control {partition program} {
 	send "020$partition$program"
 }
 
+#
+# partition_arm_control_away - arm the specified partition into away mode
+#
 proc partition_arm_control_away {partition} {
 	partition_check $partition
 
 	send "030$partition"
 }
 
+#
+# partition_arm_control_stay - arm the specified partition into stay mode
+#
 proc partition_arm_control_stay {partition} {
 	partition_check $partition
 
 	send "031$partition"
 }
 
+#
+# partition_arm_control_armed_no_entry_delay - arm the specified partition with no entry delay
+#
 proc partition_arm_control_armed_no_entry_delay {partition} {
 	partition_check $partition
 
 	send "032$partition"
 }
 
+#
+# partition_arm_control_with_code - arm the specified partition with the specified code
+#
 proc partition_arm_control_with_code {partition code} {
 	partition_check $partition
 	set code [code_check $code]
@@ -122,6 +183,9 @@ proc partition_arm_control_with_code {partition code} {
 	send "033$partition$code"
 }
 
+#
+# partition_disarm_control_with_code - disarm the specified partition with the specified code
+#
 proc partition_disarm_control_with_code {partition code} {
 	partition_check $partition
 	set code [code_check $code]
@@ -129,11 +193,10 @@ proc partition_disarm_control_with_code {partition code} {
 	send "040$partition$code"
 }
 
-
-
-
-
-
+#
+# decode - given a message received from a TL-100, return a TCL list containing
+#  information about the message
+#
 proc decode {message} {
 	set code [string range $message 0 2]
 	set body [string range $message 3 end-2]
