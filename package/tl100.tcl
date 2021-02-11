@@ -23,10 +23,12 @@ array set errorCodes {
 #
 proc comm_callback {} {
 	if {[gets $::comm line] >= 0} {
-		puts "'$line'"
+		#puts "'$line'"
 		set decoded [decode $line]
 		if {$decoded != ""} {
 			puts $decoded
+		} else {
+			puts "unrecognized callback: '$line'"
 		}
 	}
 }
@@ -65,6 +67,22 @@ proc verify_checksum {string} {
 
 	return [expr {$checksum eq [calc_checksum $string]}]
 }
+
+#
+# strip_leading_zeros - return the number stripped of leading zeros
+#
+proc strip_leading_zeros {num} {
+	scan $num %d num
+	return $num
+}
+
+#
+# format_zone - return the zone stripped of leading zeros
+#
+proc format_zone {zone} {
+	return [strip_leading_zeros $zone]
+}
+
 
 #
 # send - send a string to the TL-100 with a calculated checksum and CRLF
@@ -178,8 +196,8 @@ proc partition_arm_control_armed_no_entry_delay {partition} {
 #
 proc partition_arm_control_with_code {partition code} {
 	partition_check $partition
-	set code [code_check $code]
 
+	set code [code_check $code]
 	send "033$partition$code"
 }
 
@@ -191,6 +209,64 @@ proc partition_disarm_control_with_code {partition code} {
 	set code [code_check $code]
 
 	send "040$partition$code"
+}
+
+proc timestamp_control {state} {
+	send "055$state"
+}
+
+proc time_date_broadcast_control {state} {
+	send "056$state"
+}
+
+proc temperature_broadcast_control {state} {
+	send "057$state"
+}
+
+proc virtual_keypad_control {state} {
+	send "058$state"
+}
+
+proc trigger_panic_alarm {state} {
+	# state must be F, A or P for fire, ambulance or Panic
+	send "060$state"
+}
+
+#
+# key_pressed - simulate pressing a key on a remote
+#
+proc key_pressed {key} {
+	# key can be ascii numeric 0 - 9
+	# F, A, P for fire, ambulance, panic keys
+	# a, b, c, d, e for function keys 1 - 5
+	# arrow keys "<" ">"
+	# both arrow keys "="
+	# break key "^"
+	send "070$key"
+}
+
+proc baud_rate_change {val} {
+	# 0 = 9600, 1 = 19200, 2 = 38400, 3 = 57600, 4 = 115200
+	send "080$val"
+}
+
+proc get_temperature_set_point {val} {
+	# val can be 1, 2, 3 or 4 for the thermostat to change
+	send "095$val"
+}
+
+proc temperature_change {} {
+}
+
+proc save_temperature_setting {} {
+}
+
+#
+# code_send - send the 4 or 6 digit code
+#
+proc code_send {code} {
+	set code [code_check $code]
+	send "200$code"
 }
 
 #
@@ -225,31 +301,28 @@ proc decode {message} {
 			return [list broadcast_labels $labelNumber $label]
 		}
 		580 {return [list baud_rate_set $body]}
-		601 {return [list zone_alarm [string index $body 0] [string range $body 1 end]]}
-		602 {return [list zone_alarm_restore [string index $body 0] [string range $body 1 end]]}
-		603 {return [list zone_tamper [string index $body 0] [string range $body 1 end]]}
-		604 {return [list zone_tamper_restore [string index $body 0] [string range $body 1 end]]}
-		605 {return [list zone_fault $body]}
-		606 {return [list zone_fault_restore $body]}
-		609 {return [list zone_open $body]}
-		610 {return [list zone_restored $body]}
+		601 {return [list zone_alarm [string index $body 0] [format_zone [string range $body 1 end]]]}
+		602 {return [list zone_alarm_restore [string index $body 0] [format_zone [string range $body 1 end]]]}
+		603 {return [list zone_tamper [string index $body 0] [format_zone [string range $body 1 end]]]}
+		604 {return [list zone_tamper_restore [string index $body 0] [format_zone [string range $body 1 end]]]}
+		605 {return [list zone_fault [format_zone $body]]}
+		606 {return [list zone_fault_restore [format_zone $body]]}
+
+		609 {return [list zone_open [format_zone $body]]}
+		610 {return [list zone_restored [format_zone $body]]}
+
 		620 {return [list duress_alarm $body]}
 		621 {return [list fire_key_alarm]}
 		622 {return [list fire_key_alarm_restored]}
 		623 {return [list auxiliary_key_alarm]}
 		624 {return [list auxiliary_key_alarm_restored]}
 		625 {return [list panic_key_alarm]}
-
-		626 {
-			if {$body == ""} {
-				return [list panic_key_alarm_restored]
-			} else {
-				return [list partition_ready $body]
-			}
-		}
+		626 {return [list panic_key_alarm_restored]}
 
 		631 {return [list auxiliary_input_alarm]}
 		632 {return [list auxiliary_input_alarm_restored]}
+
+		650 {return [list partition_ready $body]}
 		651 {return [list partition_not_ready $body]}
 
 		652 {
@@ -272,29 +345,38 @@ proc decode {message} {
 		658 {return [list keypad_lockout $body]}
 		659 {return [list keypad_blanking $body]}
 		660 {return [list command_output_in_progress $body]}
+
 		670 {return [list invalid_access_code $body]}
 		671 {return [list function_not_available $body]}
 		672 {return [list fail_to_arm $body]}
 		673 {return [list partition_busy $body]}
+
 		700 {return [list user_closing [string index $body 0] [string range $body 1 end]]}
 		701 {return [list special_closing $body]}
 		702 {return [list partial_closing $body]}
+
 		750 {return [list user_opening [string index $body 0] [string range $body 1 end]]}
 		751 {return [list special_opening $body]}
+
 		800 {return [list panel_battery_trouble]}
 		801 {return [list panel_battery_trouble_restore]}
 		802 {return [list panel_ac_trouble]}
 		803 {return [list panel_ac_restore]}
+
 		806 {return [list system_bell_trouble]}
 		807 {return [list system_bell_trouble_restoral]}
+
 		810 {return [list tlm_line_1_trouble]}
 		811 {return [list tlm_line_1_trouble_restored]}
 		812 {return [list tlm_line_2_trouble]}
 		813 {return [list tlm_line_2_trouble_restored]}
 		814 {return [list failure_to_communicate_trouble]}
+
 		816 {return [list buffer_near_full]}
+
 		821 {return [list general_device_low_battery $body]}
 		822 {return [list general_device_low_battery_restore $body]}
+
 		825 {return [list wireless_key_low_battery_trouble $body]}
 		826 {return [list wireless_key_low_battery_trouble_restore $body]}
 		827 {return [list handheld_keypad_low_battery_trouble $body]}
@@ -303,10 +385,15 @@ proc decode {message} {
 		830 {return [list general_system_tamper_restore]}
 		831 {return [list escort_5580_module_trouble]}
 		832 {return [list escort_5580_module_trouble_restore]}
+
 		840 {return [list trouble_status $body]}
 		841 {return [list trouble_status_restore $body]}
 		842 {return [list fire_trouble_alarm]}
 		843 {return [list fire_trouble_alarm_restore]}
+
+		896 {return [list keybus_fault]}
+		897 {return [list keybus_restored]}
+
 		900 {return [list code_required [string index $body 0] [string range $body 1 end]]}
 
 		901 {
@@ -354,12 +441,12 @@ proc decode {message} {
 			return [list led_status $led $status]
 		}
 
-		904 {return [list beep_status $body]}
+		904 {return [list beep_status [strip_leading_zeros $body]]}
 
 		905 {
 			set tone [string index $body 0]
 			set beeps [string index $body 1]
-			set interval [string index $body 2 end]
+			set interval [string range $body 2 end]
 			return [list tone_status $tone $beeps $interval]
 		}
 
