@@ -3,6 +3,7 @@
 set timezone "CST6CDT"
 set serialPort "/dev/ttyUSB0"
 set baudRate 115200
+set maxZone 8
 
 array set errorCodes {
 	017 "Keybus Busy - Installer Mode"
@@ -24,12 +25,12 @@ array set errorCodes {
 proc comm_callback {} {
 	if {[gets $::comm line] >= 0} {
 		#puts "'$line'"
-		set decoded [decode $line]
-		if {$decoded != ""} {
-			puts $decoded
-		} else {
-			puts "unrecognized callback: '$line'"
+		set decoded [decode_tl100_message $line]
+		if {[llength $decoded] == 0} {
+			# an empty list means skip reporting the message
+			return
 		}
+		puts $decoded
 	}
 }
 
@@ -270,60 +271,83 @@ proc code_send {code} {
 }
 
 #
-# decode - given a message received from a TL-100, return a TCL list containing
+# format_message - return a DSC message formatted as a TCL list of
+#   key-value pairs
+#
+proc format_message {messageType args} {
+	return [list message $messageType {*}$args]
+}
+
+#
+# format_partition_zone - return a DSC message that happens to comprise
+#   a message type, partition and zone
+#
+proc format_partition_zone {messageType body} {
+	return [format_message $messageType partition [string index $body 0] zone [format_zone [string range $body 1 end]]]
+}
+
+#
+# decode_tl100_message - given a message received from a TL-100, return a TCL list containing
 #  information about the message
 #
-proc decode {message} {
+proc decode_tl100_message {message} {
 	set code [string range $message 0 2]
 	set body [string range $message 3 end-2]
 
 	switch $code {
-		500 {return [list command_acknowledge $body]}
-		501 {return [list command_error $body]}
+		500 {return [format_message command_acknowledge command $body]}
+		501 {return [format_message command_error]}
 
 		502 {
 			set errorcode $body
-			set result [list system_error $errorcode]
+			set result [format_message system_error error $errorcode]
 			if {[info exists ::errorCodes($errorcode)]} {
-				lappend result $::errorCodes($errorcode)
+				lappend result description $::errorCodes($errorcode)
 			}
 			return $result
 		}
 
-		550 {return [list time_date_broadcast $body]}
-		560 {return [list ring_detected $body]}
-		561 {return [list indoor_temperature_broadcast $body]}
-		562 {return [list outdoor_temperature_broadcast $body]}
-		563 {return [list thermostat_set_points $body]}
+		550 {return [format_message time_date_broadcast  timedate $body]}
+		560 {return [format_message ring_detected timedate $body]}
+		561 {return [format_message indoor_temperature_broadcast temperature $body]}
+		562 {return [format_message outdoor_temperature_broadcast temperature $body]}
+		563 {return [format_message thermostat_set_points $body]}
 		570 {
 			set labelNumber [string range $body 0 2]
 			set label [string range $body 3 end]
-			return [list broadcast_labels $labelNumber $label]
+			return [format_message broadcast_labels label_number $labelNumber label $label]
 		}
-		580 {return [list baud_rate_set $body]}
-		601 {return [list zone_alarm [string index $body 0] [format_zone [string range $body 1 end]]]}
-		602 {return [list zone_alarm_restore [string index $body 0] [format_zone [string range $body 1 end]]]}
-		603 {return [list zone_tamper [string index $body 0] [format_zone [string range $body 1 end]]]}
-		604 {return [list zone_tamper_restore [string index $body 0] [format_zone [string range $body 1 end]]]}
-		605 {return [list zone_fault [format_zone $body]]}
-		606 {return [list zone_fault_restore [format_zone $body]]}
+		580 {return [format_message baud_rate_set baud $body]}
+		601 {return [format_partition_zone zone_alarm $body]}
+		602 {return [format_partition_zone zone_alarm_restore $body]}
+		603 {return [format_partition_zone zone_tamper $body]}
+		604 {return [format_partition_zone zone_tamper_restore $body]}
+		605 {return [format_message zone_fault zone [format_zone $body]]}
+		606 {return [format_message zone_fault_restore zone [format_zone $body]]}
 
-		609 {return [list zone_open [format_zone $body]]}
-		610 {return [list zone_restored [format_zone $body]]}
+		609 {return [format_message zone_open zone [format_zone $body]]}
 
-		620 {return [list duress_alarm $body]}
-		621 {return [list fire_key_alarm]}
-		622 {return [list fire_key_alarm_restored]}
-		623 {return [list auxiliary_key_alarm]}
-		624 {return [list auxiliary_key_alarm_restored]}
-		625 {return [list panic_key_alarm]}
-		626 {return [list panic_key_alarm_restored]}
+		610 {
+			set zone [format_zone $body]
+			if {$zone > $::maxZone} {
+				return [list]
+			}
+			return [format_message zone_restored zone $zone]
+		}
 
-		631 {return [list auxiliary_input_alarm]}
-		632 {return [list auxiliary_input_alarm_restored]}
+		620 {return [format_message duress_alarm code $body]}
+		621 {return [format_message fire_key_alarm]}
+		622 {return [format_message fire_key_alarm_restored]}
+		623 {return [format_message auxiliary_key_alarm]}
+		624 {return [format_message auxiliary_key_alarm_restored]}
+		625 {return [format_message panic_key_alarm]}
+		626 {return [format_message panic_key_alarm_restored]}
 
-		650 {return [list partition_ready $body]}
-		651 {return [list partition_not_ready $body]}
+		631 {return [format_message auxiliary_input_alarm]}
+		632 {return [format_message auxiliary_input_alarm_restored]}
+
+		650 {return [format_message partition_ready partition $body]}
+		651 {return [format_message partition_not_ready partition $body]}
 
 		652 {
 			set partition [string index $body 0]
@@ -334,74 +358,74 @@ proc decode {message} {
 				2 {set mode away_no_delay}
 				3 {set mode stay_o_delay}
 			}
-			return [list partition_armed_descriptive_mode $partition $mode]
+			return [format_message partition_armed_descriptive_mode partition $partition mode $mode]
 		}
 
-		653 {return [list partition_in_ready_to_force_arm $body]}
-		654 {return [list partition_in_alarm $body]}
-		655 {return [list partition_disarmed $body]}
-		656 {return [list exit_delay_in_progress $body]}
-		657 {return [list entry_delay_in_progress $body]}
-		658 {return [list keypad_lockout $body]}
-		659 {return [list keypad_blanking $body]}
-		660 {return [list command_output_in_progress $body]}
+		653 {return [format_message partition_in_ready_to_force_arm partition $body]}
+		654 {return [format_message partition_in_alarm partition $body]}
+		655 {return [format_message partition_disarmed partition $body]}
+		656 {return [format_message exit_delay_in_progress partition $body]}
+		657 {return [format_message entry_delay_in_progress partition $body]}
+		658 {return [format_message keypad_lockout partition $body]}
+		659 {return [format_message keypad_blanking partition $body]}
+		660 {return [format_message command_output_in_progress partition $body]}
 
-		670 {return [list invalid_access_code $body]}
-		671 {return [list function_not_available $body]}
-		672 {return [list fail_to_arm $body]}
-		673 {return [list partition_busy $body]}
+		670 {return [format_message invalid_access_code partition $body]}
+		671 {return [format_message function_not_available partition $body]}
+		672 {return [format_message fail_to_arm partition $body]}
+		673 {return [format_message partition_busy partition $body]}
 
-		700 {return [list user_closing [string index $body 0] [string range $body 1 end]]}
-		701 {return [list special_closing $body]}
-		702 {return [list partial_closing $body]}
+		700 {return [format_message user_closing partition [string index $body 0] user_code [string range $body 1 end]]}
+		701 {return [format_message special_closing partition $body]}
+		702 {return [format_message partial_closing partition $body]}
 
-		750 {return [list user_opening [string index $body 0] [string range $body 1 end]]}
-		751 {return [list special_opening $body]}
+		750 {return [format_message user_opening partition [string index $body 0] user_code [string range $body 1 end]]}
+		751 {return [format_message special_opening partitioning $body]}
 
-		800 {return [list panel_battery_trouble]}
-		801 {return [list panel_battery_trouble_restore]}
-		802 {return [list panel_ac_trouble]}
-		803 {return [list panel_ac_restore]}
+		800 {return [format_message panel_battery_trouble]}
+		801 {return [format_message panel_battery_trouble_restore]}
+		802 {return [format_message panel_ac_trouble]}
+		803 {return [format_message panel_ac_restore]}
 
-		806 {return [list system_bell_trouble]}
-		807 {return [list system_bell_trouble_restoral]}
+		806 {return [format_message system_bell_trouble]}
+		807 {return [format_message system_bell_trouble_restoral]}
 
-		810 {return [list tlm_line_1_trouble]}
-		811 {return [list tlm_line_1_trouble_restored]}
-		812 {return [list tlm_line_2_trouble]}
-		813 {return [list tlm_line_2_trouble_restored]}
-		814 {return [list failure_to_communicate_trouble]}
+		810 {return [format_message tlm_line_1_trouble]}
+		811 {return [format_message tlm_line_1_trouble_restored]}
+		812 {return [format_message tlm_line_2_trouble]}
+		813 {return [format_message tlm_line_2_trouble_restored]}
+		814 {return [format_message failure_to_communicate_trouble]}
 
-		816 {return [list buffer_near_full]}
+		816 {return [format_message buffer_near_full]}
 
-		821 {return [list general_device_low_battery $body]}
-		822 {return [list general_device_low_battery_restore $body]}
+		821 {return [format_message general_device_low_battery zone $body]}
+		822 {return [format_message general_device_low_battery_restore zone $body]}
 
-		825 {return [list wireless_key_low_battery_trouble $body]}
-		826 {return [list wireless_key_low_battery_trouble_restore $body]}
-		827 {return [list handheld_keypad_low_battery_trouble $body]}
-		828 {return [list handheld_keypad_low_battery_trouble_restore $body]}
-		829 {return [list general_system_tamper]}
-		830 {return [list general_system_tamper_restore]}
-		831 {return [list escort_5580_module_trouble]}
-		832 {return [list escort_5580_module_trouble_restore]}
+		825 {return [format_message wireless_key_low_battery_trouble key $body]}
+		826 {return [format_message wireless_key_low_battery_trouble_restore key $body]}
+		827 {return [format_message handheld_keypad_low_battery_trouble keypad $body]}
+		828 {return [format_message handheld_keypad_low_battery_trouble_restore keypad $body]}
+		829 {return [format_message general_system_tamper]}
+		830 {return [format_message general_system_tamper_restore]}
+		831 {return [format_message escort_5580_module_trouble]}
+		832 {return [format_message escort_5580_module_trouble_restore]}
 
-		840 {return [list trouble_status $body]}
-		841 {return [list trouble_status_restore $body]}
-		842 {return [list fire_trouble_alarm]}
-		843 {return [list fire_trouble_alarm_restore]}
+		840 {return [format_message trouble_status partition $body]}
+		841 {return [format_message trouble_status_restore partition $body]}
+		842 {return [format_message fire_trouble_alarm]}
+		843 {return [format_message fire_trouble_alarm_restore]}
 
-		896 {return [list keybus_fault]}
-		897 {return [list keybus_restored]}
+		896 {return [format_message keybus_fault]}
+		897 {return [format_message keybus_restored]}
 
-		900 {return [list code_required [string index $body 0] [string range $body 1 end]]}
+		900 {return [format_message code_required partition [string index $body 0] notsure [string range $body 1 end]]}
 
 		901 {
 			set line [string index $body 0]
 			set column [string range $body 1 2]
-			set nChar [string range $body 3 2]
+			set nChar [string range $body 3 4]
 			set data [string range $body 5 end]
-			return [list lcd_update $line $column $nChar $data]
+			return [format_message lcd_update line $line column $column n_chars $nChar data $data]
 		}
 
 		902 {
@@ -414,7 +438,7 @@ proc decode {message} {
 
 			set line [string index $body 1]
 			set column [string range $body 2 end]
-			return [list lcd_cursor $type $line $column]
+			return [format_message lcd_cursor type $type line $line column $column]
 		}
 
 		903 {
@@ -438,27 +462,31 @@ proc decode {message} {
 				"2" {set status "flashing"}
 			}
 
-			return [list led_status $led $status]
+			return [format_message led_status led $led status $status]
 		}
 
-		904 {return [list beep_status [strip_leading_zeros $body]]}
+		904 {return [format_message beep_status beeps [strip_leading_zeros $body]]}
 
 		905 {
 			set tone [string index $body 0]
 			set beeps [string index $body 1]
 			set interval [string range $body 2 end]
-			return [list tone_status $tone $beeps $interval]
+			return [format_message tone_status tone_control $tone n_beeps $beeps interval $interval]
 		}
 
-		906 {return [list buzzer_status $body]}
-		907 {return [list door_chime_status]}
+		906 {return [format_message buzzer_status seconds $body]}
+		907 {return [format_message door_chime_status]}
 
 		908 {
-			return [list software_version [string range $body 0 1] [string range $body 2 3] [string range $body 4 5]]
+			return [format_message software_version version [string range $body 0 1] sub_version [string range $body 2 3] future_use [string range $body 4 5]]
+		}
+
+		default {
+			return [format_message unrecognized_message_type code $code body $body]
 		}
 	}
 
-	return [list]
+	error "software error - should not have gotten here"
 }
 
 package provide tl100 0.0
