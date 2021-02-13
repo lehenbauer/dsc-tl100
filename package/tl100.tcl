@@ -271,6 +271,20 @@ proc code_send {code} {
 }
 
 #
+# set_time_to_the_second - calculate how many seconds until the
+#  system clock, which we assume is NTP-synced, rolls over to the
+#  next minute, and send the DSC a command to set the time in
+#  that many seconds
+#
+proc set_time_to_the_second {} {
+	set now [clock seconds]
+	set nextMinute [expr {($now / 60) * 60 + 60}]
+	set secs [expr {$nextMinute - $now}]
+	after [expr {$secs * 1000}] set_time_and_date
+	puts "setting time in $secs seconds"
+}
+
+#
 # format_message - return a DSC message formatted as a TCL list of
 #   key-value pairs
 #
