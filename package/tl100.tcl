@@ -422,8 +422,8 @@ proc decode_tl100_message {message} {
 
 		901 {
 			set line [string index $body 0]
-			set column [string range $body 1 2]
-			set nChar [string range $body 3 4]
+			set column [strip_leading_zeros [string range $body 1 2]]
+			set nChar [strip_leading_zeros [string range $body 3 4]]
 			set data [string range $body 5 end]
 			return [format_message lcd_update line $line column $column n_chars $nChar data $data]
 		}
@@ -437,7 +437,7 @@ proc decode_tl100_message {message} {
 			}
 
 			set line [string index $body 1]
-			set column [string range $body 2 end]
+			set column [strip_leading_zeros [string range $body 2 end]]
 			return [format_message lcd_cursor type $type line $line column $column]
 		}
 
