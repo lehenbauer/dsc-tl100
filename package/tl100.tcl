@@ -492,7 +492,7 @@ proc decode_tl100_message {message} {
 		907 {return [format_message door_chime_status]}
 
 		908 {
-			return [format_message software_version version [string range $body 0 1] sub_version [string range $body 2 3] future_use [string range $body 4 5]]
+			return [format_message software_version version [strip_leading_zeros [string range $body 0 1]] sub_version [strip_leading_zeros [string range $body 2 3]] future_use [strip_leading_zeros [string range $body 4 5]]]
 		}
 
 		default {
