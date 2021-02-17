@@ -18,6 +18,8 @@ Run Tcl and source the tl100.tcl file.
 
 Invoke open_serial_port
 
+or run tclsh and source the go.tcl file.  it'll connect and do a status request and set the DSC date and time to match the system time from your computer.
+
 You can now send commands to the DSC alarm system through the TL-100
 
 * poll - send a poll command.  The resonse is a commmand acknowledge for command 000, the poll command.
@@ -30,6 +32,41 @@ You can now send commands to the DSC alarm system through the TL-100
 * partition_arm_control_armed_no_entry_delay - arm the specified partition with no entry delay
 * partition_arm_control_with_code - arm the specified partition with the specified code
 * partition_disarm_control_with_code - disarm the specified partition with the specified code
+* timestamp_control
+* time_date_broadcast_control
+* temperature_broadcast_control
+* virtual_keypad_control
+* trigger_panic_alarm
+* key_pressed - see sending key presses, below
+* baud_rate_change
+* get_temperature_set_point
+* temperature_change
+* save_temperature_setting
+* code_send
+
+### sending key presses
+
+Most stuff you can do with commands, but you can also send keypresses as if from a remote keypad.  Send a key press using the key_pressed command with the key for an argument.
+
+The key can be
+* ASCII numeric 0-9 for the numeric pad.
+* F, A, or P, to press the fire, ambulance, and panic keys.
+* a, b, c, d or e for the function keys 1 - 5
+* Arrow keys "<" and ">"
+* Both arrow keys by sending "="
+* The break key by sending "^"
+
+If you need to hold a key down for, say, two seconds, then you need to arrange to send the key and then two seconds later send the break key by invoking `key_pressed ^`.
+
+### decoding TL-100 messages
 
 Messages from the TL-100 are decoded into a TCL list containing information about the message.
+
+Each message is annotated with the Unix system clock of the host running our software, in epoch format.
+
+Next will be a message type, "message", and then zero or more additional key-value pairs specifying things like the partition, zone, number of beeps, etc.
+
+Soon these messages will be encoded into JSON or something.
+
+The messages are decoded and currently emitted to stdout, but a callback mechanism will soon be provided.
 
