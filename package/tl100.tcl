@@ -1,9 +1,12 @@
 
+package require yajltcl
 
 set timezone "CST6CDT"
 set serialPort "/dev/ttyUSB0"
 set baudRate 115200
 set maxZone 8
+
+source json.tcl
 
 array set errorCodes {
 	017 "Keybus Busy - Installer Mode"
@@ -30,7 +33,8 @@ proc comm_callback {} {
 			# an empty list means skip reporting the message
 			return
 		}
-		puts $decoded
+		#puts $decoded
+		puts [message_to_json $decoded]
 	}
 }
 
