@@ -23,3 +23,5 @@ proc message_to_json {message} {
 	$json delete
 	return  $val
 }
+
+package provide tl100 0.0

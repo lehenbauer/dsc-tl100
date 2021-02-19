@@ -1,5 +1,6 @@
 
 package require yajltcl
+package require Tclx
 
 set timezone "CST6CDT"
 set serialPort "/dev/ttyUSB0"
@@ -33,7 +34,7 @@ proc comm_callback {} {
 			# an empty list means skip reporting the message
 			return
 		}
-		#puts $decoded
+		puts $decoded
 		puts [message_to_json $decoded]
 	}
 }
@@ -343,13 +344,18 @@ proc decode_tl100_message {message} {
 		605 {return [format_message $code zone_fault zone [format_zone $body]]}
 		606 {return [format_message $code zone_fault_restore zone [format_zone $body]]}
 
-		609 {return [format_message $code zone_open zone [format_zone $body]]}
+		609 {
+			set zone [format_zone $body]
+			set_zone_status $zone open
+			return [format_message $code zone_open zone $zone]
+		}
 
 		610 {
 			set zone [format_zone $body]
 			if {$zone > $::maxZone} {
 				return [list]
 			}
+			set_zone_status $zone closed
 			return [format_message $code zone_restored zone $zone]
 		}
 
@@ -507,4 +513,14 @@ proc decode_tl100_message {message} {
 	error "software error - should not have gotten here"
 }
 
+proc go {} {
+	sqlite_init
+	open_serial_port
+	status_request
+	set_time_to_the_second
+	puts "ready"
+}
+
 package provide tl100 0.0
+
+
