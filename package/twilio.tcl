@@ -74,8 +74,8 @@ namespace eval twilio {
 		set from $phone_number
 
         ::tls::init -tls1 1 -ssl3 0 -ssl2 0
-        http::register https 443 [list ::tls::socket -request 1 -require 1 -cafile ./server.pem]
-        #http::register https 443 [list ::tls::socket -request 1 -require 1]
+
+        http::register https 443 [list ::tls::socket -autoservername true]
 
 
         # Escape the URL characters, optionally add media
