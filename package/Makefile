@@ -20,10 +20,13 @@ install: pkgIndex.tcl
 	install -o root -g $(GROUP) -m 0644 $(FILES) $(TARGET)/
 	mkdir -p $(TARGET)/db
 	chmod a+rwx $(TARGET)/db
-	#rm -f $(TARGET)/db/*.sqlite*
-	rm -f $(DBDIR)/*.sqlite*
 	@echo "installed $(PACKAGE) to $(LIB)"
 
+full-install: delete-database install
+
+# use if schema has changed
+delete-database:
+	rm -f $(DBDIR)/*.sqlite*
 
 
 pkgIndex.tcl:	$(TCLFILES)

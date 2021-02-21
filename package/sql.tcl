@@ -80,7 +80,7 @@ proc set_zone_status {zone state} {
 	}
 	db eval "select * from zone_status where zone = :zone" row {
 		if {[info exists row(state)] && $row(state) eq $state} {
-			"puts zone $zone already in state $state"
+			puts "zone $zone already in state $state"
 			return
 		}
 
