@@ -93,5 +93,5 @@ proc set_zone_status {zone state} {
 	puts "saw zone $zone for the first time, state $state"
 }
 
-package provide tl100 0.0
+package provide tl100 1.0.0
 

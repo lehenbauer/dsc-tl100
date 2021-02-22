@@ -7,8 +7,6 @@ set serialPort "/dev/ttyUSB0"
 set baudRate 115200
 set maxZone 8
 
-source json.tcl
-
 array set errorCodes {
 	017 "Keybus Busy - Installer Mode"
 	021  "Requested Partition is out of Range"
@@ -521,6 +519,6 @@ proc go {} {
 	puts "ready"
 }
 
-package provide tl100 0.0
+package provide tl100 1.0.0
 
 
