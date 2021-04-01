@@ -28,4 +28,4 @@ proc message_to_json {message} {
 	return  $val
 }
 
-package provide tl100 0.0
+package provide tl100 1.0.0
