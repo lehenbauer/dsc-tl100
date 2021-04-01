@@ -1,5 +1,9 @@
 
 
+#
+# message_to_json - given a message list of key-value pairs,
+#   produce a json message that corresponds to it
+#
 proc message_to_json {message} {
 	set json [yajl create #auto -beautify 0]
 	$json map_open

@@ -4,6 +4,11 @@ package require sqlite3
 global sqliteInited
 set sqliteInited 0
 
+#
+# sqlite_init - open and set up the sqlite database
+#
+# if we created it, run what's in our tables.sql to set it up
+#
 proc sqlite_init {} {
 	if {$::sqliteInited} return
 
@@ -62,10 +67,17 @@ proc find_package_dir {package} {
 	error "couldn't find package dir for package $package"
 }
 
+#
+# state_to_clockvar - translate between a state ("open", "closed") to
+#   a clock variable name ("last_opened", "last_closed")
+#
 proc state_to_clockvar {state} {
 	return [expr {$state eq "open" ? "last_opened" : "last_closed"}]
 }
 
+#
+# foormat_clock - format a clock as YY/MM/DD HH:MM:SS
+#
 proc format_clock {clock} {
 	if {$clock eq ""} {
 		return never
@@ -74,6 +86,13 @@ proc format_clock {clock} {
 	}
 }
 
+#
+# set_zone_status - given a zone and a zone state, if the zone is in a different
+# state than the last state read from the database, update the database and
+# log the state change.
+#
+# if seeing the zone for the first time, insert it into the database.
+#
 proc set_zone_status {zone state} {
 	if {$state != "closed" && $state != "open"} {
 		error "state '$state' must be closed or open"
