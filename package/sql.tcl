@@ -23,8 +23,10 @@ proc sqlite_init {} {
 	chmod a+rwx $dbFile
 
 	if {!$exists} {
+		puts "creating sqlite tables"
 		db eval [read_file [file join $dir tables.sql]]
 	}
+	puts "sqlite initialized from $dbFile as db"
 }
 
 #
@@ -99,17 +101,29 @@ proc set_zone_status {zone state} {
 	}
 	db eval "select * from zone_status where zone = :zone" row {
 		if {[info exists row(state)] && $row(state) eq $state} {
-			puts "zone $zone already in state $state"
+			log_message "zone $zone already in state $state"
 			return
 		}
 
 		db eval "update zone_status set state = :state, [state_to_clockvar $state] = [clock seconds] where zone = :zone"
-		puts "zone $zone changed from $row(state) to $state, last opened [format_clock $row(last_opened)], last closed [format_clock $row(last_closed)]"
+		log_message "zone $zone changed from $row(state) to $state, last opened [format_clock $row(last_opened)], last closed [format_clock $row(last_closed)]"
 		return
 	}
 	set now [clock seconds]
 	db eval "insert into zone_status (zone, state, first_seen, [state_to_clockvar $state]) values (:zone, :state, $now, $now)"
-	puts "saw zone $zone for the first time, state $state"
+	log_message "saw zone $zone for the first time, state $state"
+}
+
+proc log_message {message} {
+	puts $message
+	set ::logClock [clock seconds]
+	if {![info exists ::lastLogClock] || $::lastLogClock != $::logClock} {
+		set ::lastLogClock $::logClock
+		set ::logSequence 0
+	} else {
+		incr ::logSequence
+	}
+	db eval "insert into message_log (clock, sequence, message) values (:::logClock, :::logSequence, :message)"
 }
 
 package provide tl100 1.0.0

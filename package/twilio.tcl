@@ -112,8 +112,7 @@ namespace eval twilio {
 
         # HTTP Response: print it to command line if we failed...
         if {[string first "20" [::http::code $tok]] != -1} {
-            puts [::http::code $tok]
-            puts [::http::data $tok]
+            log_message "http code '[::http::code $tok]', data ' [::http::data $tok]'"
             return false
         } else {
             return true

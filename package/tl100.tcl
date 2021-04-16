@@ -32,7 +32,7 @@ proc comm_callback {} {
 			# an empty list means skip reporting the message
 			return
 		}
-		puts $decoded
+		log_message $decoded
 		puts [message_to_json $decoded]
 	}
 }
@@ -284,7 +284,7 @@ proc set_time_to_the_second {} {
 	set nextMinute [expr {($now / 60) * 60 + 60}]
 	set secs [expr {$nextMinute - $now}]
 	after [expr {$secs * 1000}] set_time_and_date
-	puts "setting time in $secs seconds"
+	log_message "setting time in $secs seconds"
 }
 
 #

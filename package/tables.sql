@@ -10,3 +10,10 @@ create table zone_status (
 	first_seen integer
 );
 
+create table message_log (
+	clock integer,
+	sequence integer,
+	message varchar,
+	primary key(clock, sequence)
+);
+
